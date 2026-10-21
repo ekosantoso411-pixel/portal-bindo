@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Portal Ujian Siswa</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; background-color: #f3f4f6; }
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .header { text-align: center; margin-bottom: 30px; }
+    .form-group { margin-bottom: 15px; }
+    input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 4px; }
+    .btn { background-color: #10b981; color: white; padding: 12px 20px; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; width: 100%; font-size: 16px;}
+    .btn:hover { background-color: #059669; }
+    .soal-container { margin-bottom: 15px; }
+    .opsi-label { display: block; margin-bottom: 8px; padding-left: 10px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: center; }
+    td.pernyataan { text-align: left; }
+    textarea { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h2>Lembar Ujian Digital</h2>
+    <p>Silakan isi identitas dan kerjakan soal dengan teliti.</p>
+  </div>
+
+  <div class="card">
+    <div class="form-group">
+      <label>Nama Lengkap:</label>
+      <input type="text" id="namaSiswa" placeholder="Masukkan nama lengkap Anda" required>
+    </div>
+    <div class="form-group">
+      <label>Kelas:</label>
+      <input type="text" id="kelasSiswa" placeholder="Contoh: 7A" required>
+    </div>
+  </div>
+
+  <div id="area-soal">
+    <div class="card" style="text-align: center;">
+      <i>Sedang memuat soal dari server...</i>
+    </div>
+  </div>
+
+  <button class="btn" id="btnKirim" onclick="kirimJawaban()" style="display: none;">Kirim Jawaban Sekarang</button>
+
+  <script>
+    // ⚠️ GANTI DENGAN URL WEB APP YANG SAMA DENGAN DASHBOARD GURU
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyCAzJwOtG9fhFdyyniJaZbK0UWM3B4Z08iWuENq8iNzlly8w8Zy7_hIzy8t-aQ3qQg/exec'; 
+    let daftarSoalGlobal = [];
+
+    // Mengambil soal saat halaman pertama kali dibuka
+    window.onload = async function() {
+      try {
+        const response = await fetch(SCRIPT_URL + '?action=ambil_soal');
+        const data = await response.json();
+        daftarSoalGlobal = data;
+        renderSoal(data);
+      } catch (error) {
+        document.getElementById('area-soal').innerHTML = '<div class="card">Gagal memuat soal. Periksa koneksi internet atau URL.</div>';
+      }
+    }
+
+    // Fungsi untuk mencetak soal ke layar HTML
+    function renderSoal(daftarSoal) {
+      const area = document.getElementById('area-soal');
+      area.innerHTML = ''; // Bersihkan tulisan loading
+
+      if(daftarSoal.length === 0) {
+        area.innerHTML = '<div class="card">Belum ada soal ujian yang tersedia.</div>';
+        return;
+      }
+
+      daftarSoal.forEach((soal, index) => {
+        let html = `<div class="card soal-item" data-id="${soal.idSoal}" data-tipe="${soal.tipeSoal}">
+                      <p><strong>${index + 1}. ${soal.teksSoal}</strong></p>
+                      <div class="soal-container">`;
+
+        // Logika cetak berdasarkan tipe soal
+        if (soal.tipeSoal === 'Pilihan Ganda') {
+          soal.dataJawaban.forEach((opsi, i) => {
+            html += `<label class="opsi-label">
+                       <input type="radio" name="${soal.idSoal}" value="${opsi.teks}"> ${opsi.teks}
+                     </label>`;
+          });
+        } 
+        else if (soal.tipeSoal === 'Pilihan Ganda Kompleks') {
+          soal.dataJawaban.forEach((opsi, i) => {
+            html += `<label class="opsi-label">
+                       <input type="checkbox" name="${soal.idSoal}" value="${opsi.teks}"> ${opsi.teks}
+                     </label>`;
+          });
+        } 
+        else if (soal.tipeSoal === 'Sesuai/Tidak Sesuai') {
+          html += `<table>
+                    <tr><th>Pernyataan</th><th>Sesuai</th><th>Tidak Sesuai</th></tr>`;
+          soal.dataJawaban.forEach((opsi, i) => {
+            html += `<tr>
+                      <td class="pernyataan">${opsi.pernyataan}</td>
+                      <td><input type="radio" name="${soal.idSoal}_${i}" value="Sesuai"></td>
+                      <td><input type="radio" name="${soal.idSoal}_${i}" value="Tidak Sesuai"></td>
+                     </tr>`;
+          });
+          html += `</table>`;
+        } 
+        else {
+          // Untuk Isian Singkat dan Uraian
+          html += `<textarea name="${soal.idSoal}" rows="4" placeholder="Ketik jawaban Anda di sini..."></textarea>`;
+        }
+
+        html += `</div></div>`;
+        area.innerHTML += html;
+      });
+
+      // Tampilkan tombol kirim setelah soal berhasil dimuat
+      document.getElementById('btnKirim').style.display = 'block';
+    }
+
+    // Fungsi mengumpulkan jawaban dan mengirim ke server
+    async function kirimJawaban() {
+      const nama = document.getElementById('namaSiswa').value;
+      const kelas = document.getElementById('kelasSiswa').value;
+
+      if (!nama || !kelas) {
+        alert("Mohon isi Nama dan Kelas terlebih dahulu!");
+        return;
+      }
+
+      const btn = document.getElementById('btnKirim');
+      btn.innerText = 'Mengirim Jawaban...';
+      btn.disabled = true;
+
+      let jawabanSiswa = [];
+      const soalElements = document.querySelectorAll('.soal-item');
+
+      // Tarik semua jawaban dari form
+      soalElements.forEach(el => {
+        const idSoal = el.getAttribute('data-id');
+        const tipe = el.getAttribute('data-tipe');
+        let nilaiJawaban = null;
+
+        if (tipe === 'Pilihan Ganda') {
+          const checked = el.querySelector(`input[name="${idSoal}"]:checked`);
+          nilaiJawaban = checked ? checked.value : '';
+        } 
+        else if (tipe === 'Pilihan Ganda Kompleks') {
+          const checked = el.querySelectorAll(`input[name="${idSoal}"]:checked`);
+          nilaiJawaban = Array.from(checked).map(cb => cb.value);
+        } 
+        else if (tipe === 'Sesuai/Tidak Sesuai') {
+          nilaiJawaban = [];
+          const rows = el.querySelectorAll('tr');
+          // Mulai dari 1 karena 0 adalah header tabel
+          for(let i = 1; i < rows.length; i++) { 
+             const pernyataan = rows[i].querySelector('.pernyataan').innerText;
+             const checked = rows[i].querySelector(`input[type="radio"]:checked`);
+             nilaiJawaban.push({
+               pernyataan: pernyataan,
+               jawaban: checked ? checked.value : ''
+             });
+          }
+        } 
+        else {
+          nilaiJawaban = el.querySelector(`textarea[name="${idSoal}"]`).value;
+        }
+
+        jawabanSiswa.push({ idSoal: idSoal, jawaban: nilaiJawaban });
+      });
+
+      // Susun data untuk dikirim ke Google Sheets
+      const payload = {
+        action: 'simpan_jawaban',
+        namaSiswa: nama,
+        kelas: kelas,
+        pelajaran: 'Ujian Campuran', // Bisa disesuaikan dinamis nanti
+        jawabanSiswa: jawabanSiswa
+      };
+
+      try {
+        const response = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        
+        document.body.innerHTML = `<div style="text-align:center; padding: 50px; font-family: Arial;">
+                                     <h2 style="color: #10b981;">Berhasil!</h2>
+                                     <p>${result.pesan}</p>
+                                     <p>Terima kasih telah mengerjakan ujian.</p>
+                                   </div>`;
+      } catch (error) {
+        alert("Gagal mengirim jawaban. Coba lagi.");
+        btn.innerText = 'Kirim Jawaban Sekarang';
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
